@@ -1,61 +1,41 @@
-//
-//  ContentView.swift
-//  badapple-sleep
-//
-//  Created by Kevin Lin on 2026-07-24.
-//
-
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @State private var status = "Ready"
+    @State private var task: Task<Void, Never>?
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
+        VStack(spacing: 12) {
+            Text(status).font(.headline).foregroundColor(.white)
+            Button("Import All Sleep") { startImport() }.buttonStyle(.borderedProminent)
+            Button("Delete All Sleep") { startDelete() }.buttonStyle(.bordered).tint(.red)
+        }
+        .padding()
+        .background(Color(red: 0.11, green: 0.11, blue: 0.12))
+        .preferredColorScheme(.dark)
+    }
+
+    private func startImport() {
+        task?.cancel(); status = "Importing..."
+        task = Task {
+            do {
+                try await HealthKitManager.shared.requestPermissions()
+                try await HealthKitManager.shared.importAllNights { done, total in
+                    status = "\(done)/\(total)"
                 }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
+                status = "Import done"
+            } catch { status = "Err: \(error)" }
         }
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+    private func startDelete() {
+        task?.cancel(); status = "Deleting..."
+        task = Task {
+            do {
+                try await HealthKitManager.shared.requestPermissions()
+                try await HealthKitManager.shared.deleteAllSleepData()
+                status = "Deleted"
+            } catch { status = "Err: \(error)" }
         }
     }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
-            }
-        }
-    }
-}
-
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
